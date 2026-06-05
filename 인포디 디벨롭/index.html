@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>Orbital Map — Label × Artist Visualization</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<style>
+  :root{
+    --bg: #0a0a0a;
+    --fg: #ffffff;
+    --fg-dim: rgba(255,255,255,.55);
+    --bg-landing: #F5FF00;   /* lime-yellow — accent flipped to background */
+    --fg-landing: #0a0a0a;
+    --fg-landing-dim: rgba(10,10,10,.6);
+    --fg-landing-faint: rgba(10,10,10,.35);
+    --fg-faint: rgba(255,255,255,.35);
+    --accent: #F5FF00;
+    --mono: ui-monospace, monospace;
+    --sans: "Inter", -apple-system, system-ui, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--fg);
+    font-family:var(--sans);overflow:hidden}
+  body{
+    /* default (map) — subtle radial glow on near-black */
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(245, 255, 0,.04), transparent 50%),
+      radial-gradient(ellipse at 80% 80%, rgba(92,184,255,.03), transparent 50%),
+      #0a0a0a;
+    transition: background 900ms cubic-bezier(.7,0,.2,1);
+  }
+  /* Landing inversion — lime-yellow flood, black ink. JSX sets
+     data-state="landing" on .stage while !entered. */
+  body:has(.stage[data-state="landing"]){
+    background: var(--bg-landing);
+  }
+
+  .stage{position:fixed;inset:0;overflow:hidden}
+  /* When landing, swap the CSS vars used by SVG text fills + chrome */
+  .stage[data-state="landing"]{
+    --fg: var(--fg-landing);
+    --fg-dim: var(--fg-landing-dim);
+    --fg-faint: var(--fg-landing-faint);
+  }
+  .orbit-svg{width:100%;height:100%;display:block}
+  /* Promote moving artist groups to their own compositor layer so the
+     per-frame transform updates don't drag the rest of the SVG (labels,
+     atmosphere blobs, rings) through a full repaint each tick. */
+  .artist-group{will-change:transform}
+  /* Label names are static — no hover transform. Hover affordance lives
+     elsewhere (orbit rings highlight, cursor changes to grab). Keeping the
+     text fixed prevents the perceived "wobble" when sweeping across labels. */
+
+  /* ───── SVG TEXT ───── */
+  .label-text{
+    font-family:var(--sans);
+    font-size:18px;
+    font-weight:700;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    pointer-events:none;
+  }
+  .artist-text{
+    font-family:var(--mono);
+    font-size:11px;
+    font-weight:500;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    pointer-events:none;
+  }
+
+  /* ─── ABD coming-soon orbit rotation ─── */
+  .cs-text{
+    font-family:var(--mono);
+    font-size:9px;
+    font-weight:500;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+  }
+  .cs-spin{
+    animation: cs-spin 28s linear infinite;
+    transform-origin: calc(var(--cx) * 1px) calc(var(--cy) * 1px);
+    transform-box: view-box;
+  }
+  @keyframes cs-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  /* ───── HEADER ───── */
+  .header{
+    position:absolute;top:24px;left:28px;z-index:5;
+    display:flex;flex-direction:column;gap:8px;
+    pointer-events:none;
+    max-width:none;
+  }
+  .header > *{pointer-events:auto}
+  .header.focused{max-width:300px}
+  .org-card{display:flex;flex-direction:row;align-items:center;gap:12px;position:relative}
+  /* Link up to the standalone growth-timeline page. Sits above the org title;
+     dark ink on the lime overview, inverts to a solid chip on hover. */
+  .timeline-link{
+    align-self:center;flex:none;white-space:nowrap;
+    display:inline-flex;align-items:center;gap:7px;
+    padding:6px 11px 6px 10px;
+    border:.5px solid rgba(10,10,10,.45);
+    border-radius:999px;
+    background:transparent;
+    color:#0a0a0a;
+    font-family:var(--mono);font-size:10px;font-weight:500;
+    letter-spacing:.14em;text-transform:uppercase;
+    text-decoration:none;cursor:pointer;
+    transition:background .18s ease, color .18s ease, border-color .18s ease, transform .18s ease;
+  }
+  .timeline-link svg{opacity:.8;transition:transform .18s ease}
+  .timeline-link:hover{
+    background:#0a0a0a;color:var(--accent);border-color:#0a0a0a;
+  }
+  .timeline-link:hover svg{transform:translateX(2px);opacity:1}
+  .org{
+    display:flex;align-items:center;gap:10px;
+    font-family:var(--sans);
+    font-weight:700;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+  }
+  .org-name{
+    font-size:18px;
+    color:#0a0a0a;
+    line-height:1;
+    display:inline-flex;align-items:center;
+  }
+  .org-region{
+    font-size:13px;
+    font-family:var(--mono);
+    font-weight:500;
+    letter-spacing:.12em;
+  }
+  .org-info-dot{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:17px;height:17px;border-radius:50%;
+    border:.5px solid rgba(10,10,10,.5);
+    font-family:var(--mono);font-size:10px;font-weight:600;
+    color:rgba(10,10,10,.65);letter-spacing:0;
+    text-transform:none;line-height:1;
+    /* Optical nudge: the lowercase "i" glyph in JetBrains Mono sits a
+       hair above the geometric center; bump down 1px so it reads centered
+       inside the circle alongside the all-caps title baseline. */
+    padding-top:1px;
+    transition:border-color .2s, color .2s;
+  }
+  .org-card:hover .org-info-dot{
+    border-color:#0a0a0a;color:#0a0a0a;
+  }
+  .tagline{
+    margin:0;font-size:13px;color:var(--fg-dim);
+    font-family:var(--mono);font-weight:400;letter-spacing:.04em;
+    max-width:420px;line-height:1.5;
+  }
+  /* org description card — slides open under the org name on hover.
+     Dark surface — text colors hardcoded so they stay readable when the
+     bg flips between lime (landing) and dark (focused). */
+  .org-desc{
+    margin-top:4px;
+    padding:14px 16px;
+    background:rgba(15,15,15,.92);
+    border:.5px solid rgba(255,255,255,.16);
+    border-radius:10px;
+    backdrop-filter:blur(20px);
+    box-shadow:0 12px 40px rgba(0,0,0,.5);
+    color:#ffffff;
+    font-family:var(--sans);font-size:12.5px;line-height:1.6;
+    letter-spacing:.005em;
+    max-width:340px;
+    opacity:0;
+    transform:translateY(-4px);
+    pointer-events:none;
+    transition:opacity .25s ease, transform .25s ease;
+  }
+  .org-desc.visible{
+    opacity:1;transform:translateY(0);
+    pointer-events:auto;
+  }
+  .org-desc p{margin:0;color:#ffffff}
+  .org-desc p + p{margin-top:8px;color:rgba(255,255,255,.7);font-size:12px}
+
+  /* focused-label info card — same slot as org-card. Sized larger so the
+     label name has real presence and the bio breathes generously. */
+  .info-card{
+    display:flex;flex-direction:column;gap:0;
+    padding:16px 18px 15px;
+    background:rgba(15,15,15,.94);
+    border:.5px solid rgba(255,255,255,.18);
+    border-radius:12px;
+    backdrop-filter:blur(20px);
+    box-shadow:0 16px 48px rgba(0,0,0,.58);
+    color:#ffffff;
+    min-width:248px;max-width:288px;
+    animation:info-in .25s ease-out;
+  }
+  @keyframes info-in{
+    from{opacity:0;transform:translateY(-6px)}
+    to{opacity:1;transform:translateY(0)}
+  }
+  .info-kicker{
+    font-family:var(--mono);font-size:9px;font-weight:500;
+    letter-spacing:.18em;text-transform:uppercase;
+    margin-bottom:8px;
+  }
+  .info-name{
+    font-family:var(--sans);font-size:20px;font-weight:800;
+    letter-spacing:.02em;text-transform:uppercase;
+    margin-bottom:11px;line-height:1.08;
+    color:#ffffff;
+  }
+  .info-grid{
+    display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;
+    padding:10px 0;
+    border-top:.5px solid rgba(255,255,255,.14);
+    border-bottom:.5px solid rgba(255,255,255,.14);
+    margin-bottom:11px;
+  }
+  .info-grid > div{display:flex;flex-direction:column;gap:3px}
+  .info-grid span{
+    font-family:var(--mono);font-size:8.5px;font-weight:400;
+    letter-spacing:.1em;text-transform:uppercase;
+    color:rgba(255,255,255,.55);
+  }
+  .info-grid b{
+    font-family:var(--sans);font-size:12.5px;font-weight:600;
+    color:#ffffff;
+  }
+  .info-bio{
+    margin:0 0 11px;
+    font-family:var(--sans);font-size:11px;line-height:1.5;
+    color:rgba(255,255,255,.8);
+  }
+  .info-join{
+    display:flex;align-items:baseline;gap:10px;
+    margin-bottom:14px;
+    text-wrap:pretty;
+  }
+  .info-join span{
+    font-family:var(--mono);font-size:9.5px;font-weight:400;
+    letter-spacing:.1em;text-transform:uppercase;
+    color:rgba(255,255,255,.55);flex-shrink:0;
+    padding-top:1px;
+  }
+  .info-join b{
+    font-family:var(--sans);font-size:13px;font-weight:600;color:#ffffff;
+    line-height:1.4;
+  }
+  .info-card .back-btn{
+    margin-top:2px;align-self:flex-start;
+    color:rgba(255,255,255,.7);
+    border-color:rgba(255,255,255,.25);
+  }
+  .info-card .back-btn:hover{
+    background:rgba(255,255,255,.08);
+    color:#ffffff;
+    border-color:rgba(255,255,255,.5);
+  }
+
+  /* ───── SEARCH ───── */
+  .search{
+    position:absolute;top:24px;right:28px;z-index:5;
+    display:flex;align-items:center;gap:8px;
+    padding:7px 14px;
+    /* Glass: white-tinted so it reads on both lime and dark backgrounds. */
+    background:rgba(255,255,255,.58);
+    border:.5px solid rgba(255,255,255,.75);
+    border-radius:999px;
+    color:var(--fg);
+    backdrop-filter:blur(22px) saturate(160%);
+    -webkit-backdrop-filter:blur(22px) saturate(160%);
+    box-shadow:0 4px 18px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.5);
+    transition:border-color .2s, background .2s;
+  }
+  .search:focus-within{
+    border-color:var(--accent);
+    background:rgba(255,255,255,.7);
+  }
+  /* Chrome text/icons are pinned dark because the frosted glass is light in
+     BOTH states (lime landing + dark focused map) — dark ink reads cleanly
+     on the white frost regardless of what's behind it. */
+  .search svg{color:rgba(10,10,10,.5);flex-shrink:0;width:13px;height:13px}
+  .search input{
+    background:transparent;border:none;outline:none;color:#0a0a0a;
+    font-family:var(--sans);font-size:13px;letter-spacing:.01em;
+    width:170px;height:18px;
+  }
+  .search input::placeholder{color:rgba(10,10,10,.4)}
+  .search button{
+    background:transparent;border:none;color:rgba(10,10,10,.5);
+    font-size:10px;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;
+  }
+  .search button:hover{color:#0a0a0a}
+
+  /* ───── CONTROLS (bottom center) ───── */
+  .controls{
+    position:absolute;bottom:24px;left:50%;transform:translateX(-50%);z-index:5;
+    display:flex;align-items:center;gap:13px;
+    padding:8px 14px;
+    /* Glass: same white-tinted treatment as search for visual cohesion. */
+    background:rgba(255,255,255,.58);
+    border:.5px solid rgba(255,255,255,.75);
+    border-radius:999px;
+    backdrop-filter:blur(22px) saturate(160%);
+    -webkit-backdrop-filter:blur(22px) saturate(160%);
+    box-shadow:0 4px 20px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.5);
+  }
+  .ctrl-btn{
+    display:flex;align-items:center;gap:7px;
+    padding:5px 11px;
+    background:rgba(255,255,255,.4);
+    border:.5px solid rgba(255,255,255,.6);
+    border-radius:999px;color:#0a0a0a;cursor:pointer;
+    font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.1em;
+    transition:background .15s,border-color .15s;
+  }
+  .ctrl-btn:hover{background:rgba(255,255,255,.55);border-color:rgba(255,255,255,.85)}
+  .ctrl-sep{width:1px;height:18px;background:rgba(10,10,10,.18)}
+  .ctrl-speed{display:flex;align-items:center;gap:10px}
+  .ctrl-label,.ctrl-value,.ctrl-hint{
+    font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.1em;
+    color:rgba(10,10,10,.55);
+  }
+  .ctrl-value{color:#0a0a0a;min-width:32px}
+  .ctrl-hint{color:rgba(10,10,10,.45);display:flex;align-items:center;gap:6px}
+  .hint-pill{
+    display:inline-block;padding:2px 6px;border:.5px solid rgba(10,10,10,.2);
+    border-radius:5px;color:#0a0a0a;background:rgba(10,10,10,.05);
+    font-size:10px;
+  }
+
+  /* drag readout under a label being dragged */
+  .drag-readout{
+    font-family:var(--mono);font-size:10px;font-weight:500;
+    letter-spacing:.08em;pointer-events:none;
+  }
+
+  /* svg cursor while dragging */
+  .orbit-svg.dragging{cursor:grabbing}
+
+  /* ───── LANDING (SVG text in viewBox coords) ───── */
+  .ls-eyebrow{
+    font-family:var(--mono);font-size:14px;font-weight:500;
+    letter-spacing:.22em;text-transform:uppercase;
+  }
+  .ls-title{
+    font-family:var(--sans);font-size:64px;font-weight:800;
+    letter-spacing:.02em;text-transform:uppercase;
+  }
+  .ls-meta{
+    font-family:var(--mono);font-size:14px;font-weight:500;
+    letter-spacing:.2em;text-transform:uppercase;
+  }
+  .ls-cta{
+    font-family:var(--mono);font-size:15px;font-weight:500;
+    letter-spacing:.22em;text-transform:uppercase;
+  }
+  .ls-hint{
+    font-family:var(--mono);font-size:12px;font-weight:400;
+    letter-spacing:.18em;text-transform:uppercase;
+  }
+
+  /* Landing title hover tooltip — HTML overlay positioned just under the
+     SVG title. The wrapper handles centering on the viewport; the inner card
+     handles the visual styling and the fade-in transition. */
+  .org-tooltip-wrap{
+    position:fixed;
+    /* The title sits at viewBox y≈80 of a 1080-tall viewBox, scaled by
+       xMidYMid meet. 14vh lands just under it at typical viewport ratios
+       while staying clear of the orbit center where the map preview sits. */
+    top:14vh;
+    left:50%;
+    transform:translateX(-50%);
+    width:min(720px, 90vw);
+    z-index:4;
+    pointer-events:none;
+  }
+  .org-tooltip{
+    box-sizing:border-box;
+    padding:22px 26px 24px;
+    background:#0a0a0a;
+    color:#f5f5f0;
+    border-radius:14px;
+    font-family:var(--sans);
+    font-size:15px;
+    line-height:1.65;
+    letter-spacing:.005em;
+    text-wrap:pretty;
+    box-shadow:0 18px 40px -16px rgba(0,0,0,.45);
+    opacity:0;
+    transform:translateY(-6px) scale(.985);
+    transform-origin:50% 0;
+    transition:opacity .32s ease, transform .32s cubic-bezier(.2,.7,.2,1);
+    will-change:opacity, transform;
+  }
+  .org-tooltip-wrap.visible .org-tooltip{
+    opacity:1;
+    transform:translateY(0) scale(1);
+  }
+  .org-tooltip p{margin:0}
+  .org-tooltip p + p{margin-top:10px;color:rgba(245,245,240,.78);font-size:14px}
+  .landing-cta rect{transition:fill .2s, transform .2s;transform-origin:center}
+  .landing-cta:hover rect{fill:rgba(10,10,10,.08)}
+  .landing-cta:hover{filter:drop-shadow(0 0 16px rgba(10,10,10,.18))}
+  .landing-cta{
+    animation:cta-pulse-svg 2.6s ease-in-out infinite;
+    transform-origin:center;transform-box:fill-box;
+  }
+  @keyframes cta-pulse-svg{
+    0%,100%{opacity:.95}
+    50%{opacity:1}
+  }
+  .back-btn{
+    margin-top:10px;
+    align-self:flex-start;
+    background:transparent;border:.5px solid rgba(255,255,255,.18);
+    color:var(--fg-dim);
+    font-family:var(--mono);font-size:12px;font-weight:500;
+    letter-spacing:.12em;
+    padding:6px 14px;border-radius:999px;
+    cursor:pointer;
+    pointer-events:auto;
+    transition:background .15s, border-color .15s, color .15s;
+  }
+  .back-btn:hover{
+    background:rgba(255,255,255,.06);
+    border-color:rgba(255,255,255,.35);
+    color:var(--fg);
+  }
+
+  /* toast */
+  .toast{
+    position:absolute;bottom:88px;left:50%;transform:translateX(-50%);
+    z-index:25;padding:8px 14px;
+    background:rgba(15,15,15,.95);border:.5px solid rgba(255,255,255,.18);
+    border-radius:999px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--fg);
+    backdrop-filter:blur(12px);
+    animation:toast-in .2s ease-out;
+  }
+  @keyframes toast-in{
+    from{opacity:0;transform:translate(-50%, 6px)}
+    to{opacity:1;transform:translate(-50%, 0)}
+  }
+  .ctrl-speed input[type="range"]{
+    -webkit-appearance:none;appearance:none;
+    width:120px;height:2px;border-radius:999px;
+    background:rgba(10,10,10,.22);outline:none;
+  }
+  .ctrl-speed input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;
+    width:12px;height:12px;border-radius:50%;
+    background:var(--accent);cursor:pointer;
+  }
+  .ctrl-speed input[type="range"]::-moz-range-thumb{
+    width:12px;height:12px;border-radius:50%;
+    background:var(--accent);cursor:pointer;border:none;
+  }
+
+  /* ───── LEGEND (bottom-left) ───── */
+  .legend{
+    position:absolute;bottom:36px;left:44px;z-index:5;
+    display:flex;flex-direction:column;gap:8px;
+    pointer-events:none;
+  }
+  .legend-item{
+    display:flex;align-items:center;gap:10px;
+    font-family:var(--mono);font-size:12px;font-weight:400;
+    letter-spacing:.06em;color:var(--fg-dim);
+  }
+  .legend-dot{
+    width:10px;height:10px;border-radius:50%;background:#fff;flex-shrink:0;
+  }
+  .legend-dot.label-dot{
+    background:var(--accent);width:8px;height:8px;
+  }
+  .legend-ring{
+    width:14px;height:14px;border-radius:50%;
+    border:.6px solid rgba(255,255,255,.45);background:transparent;flex-shrink:0;
+  }
+
+  /* ───── SYNTHETIC DEMO CURSOR (attract loop) ───── */
+  .stage.demo,
+  .stage.demo *{cursor:none !important}
+  .demo-cursor{
+    position:fixed;z-index:60;pointer-events:none;
+    transform:translate(-2px,-2px);
+    filter:drop-shadow(0 2px 5px rgba(0,0,0,.45));
+    will-change:left,top;
+  }
+  .demo-cursor svg{display:block}
+  /* click pulse ring */
+  .demo-cursor::after{
+    content:"";position:absolute;left:2px;top:2px;
+    width:14px;height:14px;border-radius:50%;
+    transform:translate(-50%,-50%) scale(0);
+    border:2px solid var(--accent, #F5FF00);
+    opacity:0;
+  }
+  .demo-cursor.click::after{animation:cursor-click .42s ease-out}
+  @keyframes cursor-click{
+    0%{transform:translate(-50%,-50%) scale(.3);opacity:.9}
+    100%{transform:translate(-50%,-50%) scale(2.6);opacity:0}
+  }
+
+  /* ───── HOVER CARDS ───── */
+  .hover-card{
+    position:absolute;z-index:20;pointer-events:none;
+    transform:translate(-50%, -100%);
+    min-width:218px;max-width:248px;
+    padding:12px 14px 13px;
+    background:rgba(15,15,15,.92);
+    border:.5px solid rgba(255,255,255,.16);
+    border-radius:10px;
+    backdrop-filter:blur(20px);
+    box-shadow:0 12px 40px rgba(0,0,0,.5);
+    color:#ffffff;
+    animation:hc-in .15s ease-out;
+  }
+  @keyframes hc-in{
+    from{opacity:0;transform:translate(-50%,-95%)}
+    to{opacity:1;transform:translate(-50%,-100%)}
+  }
+  .hc-kicker{
+    font-family:var(--mono);font-size:8.5px;font-weight:500;
+    letter-spacing:.14em;text-transform:uppercase;
+    margin-bottom:7px;
+  }
+  .hc-name{
+    font-family:var(--sans);font-size:15px;font-weight:700;
+    letter-spacing:.02em;text-transform:uppercase;
+    margin-bottom:11px;line-height:1.1;
+    color:#ffffff;
+  }
+  .hc-grid{
+    display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;
+    padding:8px 0;
+    border-top:.5px solid rgba(255,255,255,.1);
+    border-bottom:.5px solid rgba(255,255,255,.1);
+    margin-bottom:8px;
+  }
+  .hc-grid > div{display:flex;flex-direction:column;gap:3px}
+  .hc-grid span{
+    font-family:var(--mono);font-size:8px;font-weight:400;
+    letter-spacing:.08em;text-transform:uppercase;
+    color:rgba(255,255,255,.45);
+  }
+  .hc-grid b{
+    font-family:var(--sans);font-size:11px;font-weight:600;color:#ffffff;
+  }
+  .hc-row{
+    display:flex;align-items:baseline;gap:8px;
+    font-size:10px;margin-bottom:8px;
+  }
+  .hc-row span{
+    font-family:var(--mono);font-size:8px;font-weight:400;
+    letter-spacing:.08em;text-transform:uppercase;
+    color:rgba(255,255,255,.45);
+    flex-shrink:0;width:42px;
+  }
+  .hc-row b{font-family:var(--sans);font-weight:500;color:#ffffff}
+  .hc-bio{
+    margin:0;font-family:var(--sans);font-size:10.5px;line-height:1.5;
+    color:rgba(255,255,255,.7);
+  }
+  .hc-members{
+    margin-top:9px;padding-top:9px;
+    border-top:1px solid rgba(255,255,255,.1);
+  }
+  .hc-members-label{
+    display:block;font-family:var(--mono);font-size:8px;font-weight:400;
+    letter-spacing:.08em;text-transform:uppercase;
+    color:rgba(255,255,255,.45);margin-bottom:7px;
+  }
+  .hc-members-grid{
+    display:flex;flex-wrap:wrap;gap:5px;
+  }
+  .hc-chip{
+    display:inline-flex;align-items:baseline;
+    font-family:var(--sans);font-size:9.5px;font-weight:500;color:#fff;
+    line-height:1;padding:4px 7px;border-radius:5px;
+    background:rgba(255,255,255,.08);white-space:nowrap;
+  }
+  .hc-chip .yr{
+    font-family:var(--mono);font-weight:400;font-size:8px;
+    color:rgba(255,255,255,.45);margin-left:3px;
+  }
+  .hc-chip.is-leader{
+    background:rgba(245,255,0,.16);
+    color:#F5FF00;
+    box-shadow:inset 0 0 0 1px rgba(245,255,0,.5);
+  }
+  .hc-chip.is-leader .yr{color:rgba(245,255,0,.65)}
+  .hc-chip.is-leader .lead-tag{
+    font-family:var(--mono);font-size:7px;font-weight:500;
+    letter-spacing:.08em;text-transform:uppercase;
+    color:#F5FF00;opacity:.75;margin-right:5px;
+    position:relative;top:-0.5px;
+  }
+  .hc-cta{
+    margin-top:9px;font-family:var(--mono);font-size:8.5px;font-weight:500;
+    letter-spacing:.14em;text-transform:uppercase;
+  }
+  /* Compact hover hint on the overview map — just a "click to explore" nudge. */
+  .label-card--hint{
+    min-width:0;width:max-content;
+    padding:8px 12px;
+  }
+  .label-card--hint .hc-cta{ margin-top:0; }
+
+  /* ───── ARTIST CARD POSITION ADJUSTMENT ───── */
+  .artist-card{transform:translate(-50%, calc(-100% - 6px))}
+
+  /* ───── CENTERED ARTIST MODAL (focus page click) ───── */
+  .artist-modal-backdrop{
+    position:fixed;inset:0;z-index:60;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(8,8,8,.74);
+    animation:am-fade .22s ease both;
+  }
+  @keyframes am-fade{from{opacity:0}to{opacity:1}}
+  .artist-modal{
+    position:relative;
+    display:grid;grid-template-columns:minmax(190px,0.95fr) minmax(216px,1fr) 176px;
+    gap:30px;
+    width:min(740px,calc(100vw - 64px));
+    padding:30px 34px;
+    background:#161616;
+    border:.5px solid rgba(255,255,255,.12);
+    border-radius:16px;
+    box-shadow:0 30px 80px rgba(0,0,0,.55);
+    animation:am-pop .26s cubic-bezier(.4,0,.2,1) both;
+  }
+  @keyframes am-pop{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+
+  /* "Now playing" footer — spans full modal width under the columns. */
+  .am-nowplaying{
+    grid-column:1 / -1;
+    margin-top:4px;padding-top:14px;
+    border-top:1px solid rgba(255,255,255,.08);
+    display:flex;align-items:center;gap:9px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+    color:rgba(255,255,255,.5);
+  }
+  .am-nowplaying .am-np-text b{ color:rgba(255,255,255,.82);font-weight:600; }
+  /* "Debut song" tag — yellow pill sitting just after the track title. */
+  .am-np-badge{
+    display:inline-flex;align-items:center;justify-content:center;
+    margin:0 2px 0 7px;padding:3px 7px 2px;
+    border-radius:3px;
+    background:#F5FF00;color:#0a0a0a;
+    font-family:var(--mono);font-size:9px;font-weight:500;
+    letter-spacing:.04em;line-height:1;
+    transform:translateY(-1px);
+  }
+  .am-np-eq{ display:inline-flex;align-items:flex-end;gap:2px;height:12px; }
+  .am-np-eq i{
+    width:2.5px;background:var(--accent);border-radius:1px;
+    animation:am-eq 900ms ease-in-out infinite;
+  }
+  .am-np-eq i:nth-child(1){ height:5px;animation-delay:0ms; }
+  .am-np-eq i:nth-child(2){ height:11px;animation-delay:180ms; }
+  .am-np-eq i:nth-child(3){ height:7px;animation-delay:360ms; }
+  @keyframes am-eq{ 0%,100%{transform:scaleY(.4)} 50%{transform:scaleY(1)} }
+  @media (prefers-reduced-motion:reduce){ .am-np-eq i{ animation:none; } }
+  /* On larger monitors the 740px card reads small relative to the screen.
+     Scale the whole card up proportionally (zoom keeps it crisp and is
+     independent of the pop-in transform animation). */
+  @media (min-width:1680px){ .artist-modal{ zoom:1.18; } }
+  @media (min-width:2200px){ .artist-modal{ zoom:1.36; } }
+  .am-close{
+    position:absolute;top:-13px;right:-13px;
+    width:30px;height:30px;display:flex;align-items:center;justify-content:center;
+    border:.5px solid rgba(255,255,255,.16);border-radius:50%;cursor:pointer;
+    background:#1f1f1f;color:rgba(255,255,255,.7);
+    box-shadow:0 6px 18px rgba(0,0,0,.45);
+    transition:background .15s,color .15s,transform .15s;
+  }
+  .am-close:hover{background:#2a2a2a;color:#fff;transform:scale(1.06)}
+  .am-left{display:flex;flex-direction:column;min-width:0}
+  .am-kicker{
+    font-family:var(--mono);font-size:9px;font-weight:500;
+    letter-spacing:.14em;text-transform:uppercase;margin-bottom:9px;
+  }
+  .am-name{
+    font-family:var(--sans);font-size:25px;font-weight:700;line-height:1.05;
+    letter-spacing:-.01em;color:#fff;margin-bottom:13px;text-wrap:balance;
+  }
+  .am-bio{
+    margin:0 0 18px;font-family:var(--sans);font-size:12px;line-height:1.55;
+    color:rgba(255,255,255,.66);
+  }
+  .am-meta{
+    display:grid;grid-template-columns:repeat(3,auto);gap:14px 26px;
+    justify-content:start;
+    margin-top:auto;padding-top:16px;
+    border-top:1px solid rgba(255,255,255,.1);
+  }
+  .am-meta > div{display:flex;flex-direction:column;gap:4px}
+  .am-meta span{
+    font-family:var(--mono);font-size:8px;font-weight:400;
+    letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.45);
+  }
+  .am-meta b{font-family:var(--sans);font-size:13px;font-weight:600;color:#fff}
+  .am-right{
+    display:flex;flex-direction:column;
+    padding-left:34px;border-left:1px solid rgba(255,255,255,.1);
+  }
+  .am-members-label{
+    font-family:var(--mono);font-size:8px;font-weight:400;
+    letter-spacing:.08em;text-transform:uppercase;
+    color:rgba(255,255,255,.45);margin-bottom:11px;
+  }
+  .am-members-grid{display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start}
+  .am-right .hc-chip{font-size:10.5px;padding:5px 9px}
+  .am-right .hc-chip .yr{font-size:8.5px}
+  /* chips that have a photo invite hover; the active one is highlighted */
+  .am-right .hc-chip.has-img{cursor:pointer;transition:background .15s,box-shadow .15s}
+  .am-right .hc-chip.has-img:not(.is-leader).active{
+    background:rgba(255,255,255,.16);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.3);
+  }
+  .am-right .hc-chip.is-leader.active{
+    background:rgba(245,255,0,.26);
+    box-shadow:inset 0 0 0 1px rgba(245,255,0,.7);
+  }
+  /* portrait preview column — top-aligned with the title + member columns. */
+  .am-portrait{display:flex;flex-direction:column;gap:9px}
+  .am-portrait-frame{
+    width:176px;height:212px;border-radius:11px;overflow:hidden;
+    background:#222;border:.5px solid rgba(255,255,255,.12);
+  }
+  /* Empty state — solid surface + a hover hint. */
+  .am-portrait-frame.is-empty{
+    background:#1b1b1b;
+    border-style:dashed;
+    border-color:rgba(255,255,255,.16);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .am-portrait-hint{
+    display:flex;flex-direction:column;align-items:center;gap:11px;
+    padding:0 18px;text-align:center;
+    color:rgba(255,255,255,.42);
+  }
+  .am-portrait-hint svg{color:rgba(255,255,255,.5)}
+  .am-portrait-hint span{
+    font-family:var(--mono);font-size:10px;font-weight:400;
+    letter-spacing:.04em;line-height:1.6;
+  }
+  .am-portrait-frame img{
+    width:100%;height:100%;object-fit:cover;display:block;
+    animation:am-img-in .25s ease both;
+  }
+  @keyframes am-img-in{from{opacity:0}to{opacity:1}}
+  .am-portrait-name{
+    display:flex;align-items:baseline;gap:6px;
+    min-height:18px;
+    font-family:var(--sans);font-size:13px;font-weight:600;color:#fff;
+  }
+  .am-portrait-name-empty{
+    font-family:var(--mono);font-size:10px;font-weight:400;
+    letter-spacing:.1em;text-transform:uppercase;
+    color:rgba(255,255,255,.35);
+  }
+  .am-portrait-name span{
+    font-family:var(--mono);font-size:9px;font-weight:400;
+    color:rgba(255,255,255,.5);
+  }
+
+  /* focus-page hint — nudges the user to click an artist name. */
+  .focus-hint{
+    position:absolute;bottom:84px;left:50%;transform:translateX(-50%);
+    z-index:15;pointer-events:none;
+    display:flex;align-items:center;gap:8px;
+    font-family:var(--mono);font-size:11px;font-weight:400;
+    letter-spacing:.1em;color:rgba(255,255,255,.5);
+    animation:focus-hint-in .5s ease both;
+  }
+  @keyframes focus-hint-in{
+    from{opacity:0;transform:translate(-50%,6px)}
+    to{opacity:1;transform:translate(-50%,0)}
+  }
+  .focus-hint-dot{
+    width:6px;height:6px;border-radius:50%;
+    background:var(--accent);flex-shrink:0;
+    animation:focus-hint-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes focus-hint-pulse{
+    0%,100%{opacity:.45;transform:scale(.8)}
+    50%{opacity:1;transform:scale(1)}
+  }
+
+  /* Stars are pure white — invisible on cream landing. Fade them in
+     as we transition into the map. */
+  .stars{
+    opacity: 1;
+    transition: opacity 900ms cubic-bezier(.7,0,.2,1);
+  }
+  .stage[data-state="landing"] .stars,
+  .stage[data-state="entering"] .stars{
+    opacity: 0;
+  }
+
+  /* ───── GRAIN OVERLAY (stylish mode) ───── */
+  .grain-overlay{
+    position:fixed; inset:0; z-index:101;
+    pointer-events:none;
+    background-repeat:repeat;
+    background-size:256px 256px;
+    mix-blend-mode:overlay;
+    /* Promote to its own compositor layer so the live SVG repaint
+       below doesn't drag the noise tile through software paint. */
+    transform:translateZ(0);
+    will-change:opacity;
+  }
+
+  /* ───── WELCOME OVERLAY (first visit, scroll-driven) ─────
+     Full-bleed lime page that gates entry to the map behind two scroll
+     beats: greeting → org description → (release) map. The map sits behind
+     it; once this fades out, the lime main home is revealed underneath. */
+  .welcome{
+    position:fixed;inset:0;z-index:100;
+    background:var(--bg-landing);
+    overflow:hidden;
+    pointer-events:none;
+    opacity:1;
+    transition:opacity .9s cubic-bezier(.55,0,.2,1);
+  }
+  .welcome.welcome-exit{opacity:0;}
+
+  /* Each beat is centered and cross-fades with the next. The container only
+     fades; the staggered rise/settle lives on the children below. */
+  .welcome-beat{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:20px;text-align:center;color:var(--fg-landing);
+    padding:0 8vw;
+    opacity:0;
+    transition:opacity .6s cubic-bezier(.4,0,.2,1);
+  }
+  .welcome-beat.is-active{opacity:1;}
+
+  /* Entrance motion — children rise + settle each time their beat becomes
+     active (this also plays on first load for the greeting). */
+  .welcome-beat.is-active .welcome-eyebrow{
+    animation:welcome-rise .65s cubic-bezier(.4,0,.2,1) .1s both;
+  }
+  .welcome-beat.is-active .welcome-logo{
+    animation:welcome-title-rise 1.05s cubic-bezier(.16,.84,.24,1) .15s both;
+  }
+  .welcome-beat.is-active .welcome-title{
+    animation:welcome-rise .9s cubic-bezier(.16,.84,.24,1) 1.05s both;
+  }
+  .welcome-beat.is-active .welcome-desc-kicker{
+    animation:welcome-rise .6s cubic-bezier(.4,0,.2,1) .08s both;
+  }
+  .welcome-beat.is-active .welcome-desc-body{
+    animation:welcome-rise .8s cubic-bezier(.4,0,.2,1) .22s both;
+  }
+  @keyframes welcome-rise{
+    from{opacity:0;transform:translateY(16px);}
+    to{opacity:1;transform:translateY(0);}
+  }
+  @keyframes welcome-title-rise{
+    0%{opacity:0;transform:translateY(28px) scale(.985);letter-spacing:.22em;}
+    60%{opacity:1;}
+    100%{opacity:1;transform:translateY(0) scale(1);letter-spacing:.02em;}
+  }
+
+  .welcome-eyebrow{
+    font-family:var(--mono);
+    font-size:14px;font-weight:500;
+    letter-spacing:.36em;
+    text-transform:uppercase;
+    color:var(--fg-landing-dim);
+  }
+  /* HYBE wordmark — the logo beat. Heavy + large so it reads as a mark. */
+  .welcome-logo{
+    font-family:var(--sans);
+    font-size:clamp(64px, 13vw, 152px);font-weight:800;
+    letter-spacing:.06em;
+    line-height:.95;
+    color:var(--fg-landing);
+  }
+  /* Actual HYBE logo lockup (black PNG on the lime landing). */
+  .welcome-logo--img{
+    width:min(480px, 66vw);
+    height:auto;
+    display:block;
+  }
+  .welcome-title{
+    font-family:var(--sans);
+    font-size:clamp(20px, 3.6vw, 38px);font-weight:600;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    line-height:1.05;
+    white-space:nowrap;
+    color:var(--fg-landing-dim);
+  }
+  .welcome-desc-kicker{
+    font-family:var(--mono);
+    font-size:13px;font-weight:500;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    color:var(--fg-landing-dim);
+    margin-bottom:4px;
+  }
+  .welcome-desc-body{
+    margin:0;max-width:700px;
+    font-family:var(--sans);
+    font-size:21px;font-weight:500;line-height:1.72;
+    letter-spacing:.004em;
+    color:var(--fg-landing);
+    text-wrap:pretty;
+  }
+
+  /* Scroll hint — pinned to the bottom, gently bobbing arrow. */
+  .welcome-hint{
+    position:absolute;left:50%;bottom:52px;transform:translateX(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:11px;
+    color:var(--fg-landing-faint);
+    transition:opacity .5s ease;
+  }
+  .welcome-hint-text{
+    font-family:var(--mono);font-size:12px;font-weight:400;
+    letter-spacing:.16em;
+  }
+  .welcome-hint-arrow{
+    font-size:15px;line-height:1;
+    animation:welcome-bob 1.8s ease-in-out infinite;
+  }
+  @keyframes welcome-bob{
+    0%,100%{transform:translateY(0);opacity:.45;}
+    50%{transform:translateY(5px);opacity:1;}
+  }
+
+  /* ───── IRIS WIPE — closes from full viewport into a point at center
+     when user clicks ENTER, then unmounts. The cream landing visible
+     "through" it gets pulled into the center as the iris contracts,
+     so the user feels sucked into the map. */
+  .iris-wipe{
+    position:fixed; inset:0; z-index:6;
+    pointer-events:none;
+    background: var(--bg-landing);
+    /* start fully visible covering the screen, then collapse to a point.
+       clip-path circle gives crisp edges; transition handles the chew. */
+    clip-path: circle(140% at 50% 50%);
+    animation: iris-suck 1100ms cubic-bezier(.65,.02,.3,1) forwards;
+  }
+  @keyframes iris-suck{
+    /* hold full coverage briefly while the camera starts pulling */
+    0%   { clip-path: circle(140% at 50% 50%); opacity: 1; }
+    35%  { clip-path: circle(70%  at 50% 50%); opacity: 1; }
+    /* fast collapse — the "suck" */
+    80%  { clip-path: circle(8%   at 50% 50%); opacity: 1; }
+    100% { clip-path: circle(0%   at 50% 50%); opacity: 0; }
+  }
+
+  /* Landing SVG content gets pulled toward the center as it exits.
+     Combined with the iris wipe, this sells the "sucked in" feeling. */
+  .landing-svg{
+    transform-origin: 50% 50%;
+    transform-box: view-box;
+    transition: transform 900ms cubic-bezier(.6,0,.2,1), opacity 600ms ease 100ms;
+  }
+  .stage[data-state="entering"] .landing-svg,
+  .stage[data-state="entered"]  .landing-svg{
+    transform: scale(0.55);
+  }
+  .intro-frame{
+    transform-origin: 50% 50%;
+    transform-box: view-box;
+    transition: transform 1000ms cubic-bezier(.55,0,.2,1), opacity 700ms ease;
+  }
+  .stage[data-state="entering"] .intro-frame,
+  .stage[data-state="entered"]  .intro-frame{
+    transform: scale(0.45);
+  }
+
+</style>
+</head>
+<body style="font-size: 16px; font-family: Inter">
+  <template id="__bundler_thumbnail">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" fill="#0a0a0a"/>
+      <circle cx="50" cy="50" r="30" fill="none" stroke="#e0533a" stroke-width="1.2" opacity="0.55"/>
+      <circle cx="50" cy="50" r="20" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.35"/>
+      <circle cx="50" cy="50" r="3.2" fill="#e0533a"/>
+      <circle cx="80" cy="50" r="2.4" fill="#ffffff"/>
+      <circle cx="34" cy="35" r="2" fill="#ffffff"/>
+    </svg>
+  </template>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script src="logos.js"></script>
+  <script src="data.js"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>

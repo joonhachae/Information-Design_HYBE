@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Growth Timeline — HYBE Music Group APAC</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+<style>
+  :root{
+    --bg: #0a0a0a;
+    --fg: #ffffff;
+    --fg-dim: rgba(255,255,255,.55);
+    --fg-faint: rgba(255,255,255,.32);
+    --hair: rgba(255,255,255,.09);
+    --hair-strong: rgba(255,255,255,.18);
+    --accent: #F5FF00;      /* lime — the HYBE moment */
+    --blue: #5CB8FF;        /* group debuts */
+    --mono: monospace;
+    --sans: "Inter", -apple-system, system-ui, sans-serif;
+    --col: 156px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    background:
+      radial-gradient(ellipse at 22% 8%, rgba(245,255,0,.055), transparent 52%),
+      radial-gradient(ellipse at 90% 95%, rgba(92,184,255,.05), transparent 55%),
+      #0a0a0a;
+    color:var(--fg);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  .page{height:100vh;max-width:1740px;margin:0 auto;
+    padding:26px clamp(22px,3vw,48px) 26px;
+    display:flex;flex-direction:column}
+
+  /* ───────── HEADER ───────── */
+  .top{flex:none;display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:0}
+  .titles{max-width:760px}
+  .eyebrow{
+    font-family:var(--mono);font-size:12px;font-weight:500;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin:0;
+  }
+  h1{
+    font-family:var(--sans);font-weight:800;font-size:clamp(32px,4.6vw,56px);
+    line-height:1.0;letter-spacing:-.018em;margin:0;text-wrap:balance;
+  }
+  .back-link{
+    display:inline-flex;align-items:center;gap:7px;
+    padding:8px 14px 8px 11px;border:.5px solid var(--hair-strong);border-radius:999px;
+    background:rgba(255,255,255,.02);color:var(--fg-dim);
+    font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;
+    text-decoration:none;transition:color .18s,border-color .18s,background .18s;
+  }
+  .back-link svg{transition:transform .18s}
+  .back-link:hover{color:var(--fg);border-color:var(--fg-dim);background:rgba(255,255,255,.05)}
+  .back-link:hover svg{transform:translateX(-2px)}
+  .bignum{
+    font-family:var(--mono);font-weight:500;font-size:clamp(26px,3vw,40px);
+    color:rgba(255,255,255,.11);letter-spacing:.02em;line-height:1;white-space:nowrap;
+    flex-shrink:0;margin-top:6px;
+  }
+
+  /* ───────── LEGEND ───────── */
+  .legend{
+    flex:none;
+    display:flex;flex-wrap:wrap;align-items:center;gap:10px 24px;margin:16px 0 2px;
+    font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-dim);
+  }
+  .lg{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+  .lg .seg{width:32px;height:9px;border-radius:5px}
+  .lg .seg.indep{background:linear-gradient(90deg,rgba(255,255,255,.10),rgba(255,255,255,.34))}
+  .lg .seg.hybe{background:linear-gradient(90deg,rgba(245,255,0,.22),rgba(245,255,0,.62))}
+  .lg .dot{width:11px;height:11px;border-radius:50%}
+  .lg .dot.lime{background:var(--accent);box-shadow:0 0 0 3px rgba(245,255,0,.14)}
+  .lg .dot.blue{background:var(--blue);box-shadow:0 0 0 3px rgba(92,184,255,.14)}
+
+  /* ───────── SHARED CHART AREA ───────── */
+  #chartArea{position:relative;margin-top:8px;flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+
+  /* ───────── LINEAR CHART ───────── */
+  .chart{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+  .axis{position:relative;flex:none;height:20px;margin-left:var(--col,156px)}
+  .axis .yr{
+    position:absolute;top:0;transform:translateX(-50%);line-height:1;
+    font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.1em;color:var(--fg-faint);
+  }
+  .grid{
+    position:absolute;left:var(--col,156px);right:0;top:20px;bottom:8px;pointer-events:none;z-index:0;
+  }
+  .gridline{position:absolute;top:0;bottom:0;width:1px;background:var(--hair)}
+  .gridline.major{background:rgba(255,255,255,.15)}
+  .nowline{position:absolute;top:0;bottom:0;width:1.5px;background:rgba(245,255,0,.28)}
+  .nowtag{
+    position:absolute;top:-20px;transform:translateX(-50%);line-height:1;
+    font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.1em;color:rgba(245,255,0,.7);text-transform:uppercase;
+  }
+
+  /* ── HYBE-established marker (2021) — dashed line + tag ── */
+  .hybeline{
+    position:absolute;top:0;bottom:0;width:0;
+    border-left:1px dashed rgba(255,255,255,.26);
+  }
+  .hybetag{
+    position:absolute;top:-20px;transform:translateX(9px);
+    display:inline-flex;align-items:center;gap:6px;line-height:1;
+    font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.1em;
+    color:var(--fg-dim);text-transform:uppercase;white-space:nowrap;
+  }
+  .hybetag .d{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.5)}
+
+  /* ── footnote: PLEDIS & KOZ context (anchored left of the 2021 line) ── */
+  .tl-note{
+    position:absolute;bottom:12px;z-index:2;
+    width:300px;pointer-events:none;
+    transform:translateX(calc(-100% - 13px));
+    display:flex;align-items:flex-start;gap:9px;
+    font-family:var(--mono);font-size:9.5px;font-weight:400;
+    letter-spacing:.03em;line-height:1.7;color:var(--fg-faint);text-align:right;
+    opacity:0;transition:opacity .9s ease;
+  }
+  .tl-note.show{opacity:1}
+  .tl-note .t{flex:1 1 auto}
+  .tl-note .d{
+    flex:none;width:0;height:24px;margin-top:2px;
+    border-left:1px dashed rgba(255,255,255,.4);
+  }
+  .tl-note b{color:var(--fg-dim);font-weight:500}
+
+  .rows{position:relative;z-index:1;margin-top:6px;flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+  .row{
+    position:relative;display:flex;align-items:center;
+    flex:1 1 0;min-height:0;
+    opacity:0;transform:translateX(-18px);
+    transition:opacity 1.15s cubic-bezier(.22,.61,.3,1), transform 1.15s cubic-bezier(.22,.61,.3,1);
+  }
+  .row.in{opacity:1;transform:none}
+
+  .logocell{
+    width:var(--col,156px);flex-shrink:0;height:100%;
+    display:flex;align-items:center;justify-content:flex-end;
+    padding-right:22px;
+    border-right:.5px solid var(--hair);
+  }
+  .logocell img{max-width:112px;max-height:28px;object-fit:contain;opacity:.95;display:block}
+  .logocell .txt{font-family:var(--sans);font-weight:700;font-size:15px;letter-spacing:.02em;color:#fff}
+
+  .track{position:relative;flex:1;height:100%}
+
+  /* lifeline segments — both gradients now (no dashes) */
+  .track .seg{position:absolute;top:50%;height:12px;border-radius:7px;transform:translateY(-50%)}
+  .track .seg.indep{
+    background:linear-gradient(90deg,rgba(255,255,255,.07),rgba(255,255,255,.30));
+    opacity:0;transition:opacity .95s ease .22s;
+  }
+  .row.in .track .seg.indep{opacity:1}
+  .track .seg.hybe{
+    background:linear-gradient(90deg,rgba(245,255,0,.16),rgba(245,255,0,.60));
+    box-shadow:0 0 18px rgba(245,255,0,.16);
+    transform:translateY(-50%) scaleX(0);transform-origin:left center;
+    transition:transform 1.2s cubic-bezier(.22,.61,.3,1) .12s;
+  }
+  .row.in .track .seg.hybe{transform:translateY(-50%) scaleX(1)}
+
+  .reveal{opacity:0;transition:opacity .85s ease .42s}
+  .row.in .reveal{opacity:1}
+
+  /* dots */
+  .mk{position:absolute;top:50%;border-radius:50%;transform:translate(-50%,-50%);z-index:3}
+  .mk.founded{width:10px;height:10px;background:var(--bg);border:1.5px solid var(--fg-dim)}
+  .mk.joined{width:13px;height:13px;background:var(--accent);box-shadow:0 0 0 4px rgba(245,255,0,.14)}
+  .mk.debut{width:9px;height:9px;background:var(--blue);box-shadow:0 0 0 3px rgba(92,184,255,.14);z-index:4}
+
+  /* labels — artist (debut) names, centered on the dot, year in a rounded pill */
+  .debut-lbl{
+    position:absolute;bottom:calc(50% + 14px);transform:translateX(-50%);
+    display:inline-flex;align-items:center;gap:5px;
+    font-family:var(--mono);font-size:8px;letter-spacing:.02em;color:var(--fg-dim);white-space:nowrap;
+  }
+  .debut-lbl .y{
+    color:var(--blue);font-size:8px;line-height:1;
+    background:rgba(92,184,255,.12);
+    border:.5px solid rgba(92,184,255,.38);
+    border-radius:6px;padding:2px 5px;
+  }
+  /* keep artist labels centered on their circle (no edge offset) */
+  .debut-lbl.edge{transform:translateX(-50%)}
+  /* year numbers under the lifeline — uniform size + shared baseline */
+  .yr{
+    position:absolute;top:calc(50% + 14px);transform:translateX(-50%);
+    font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.04em;white-space:nowrap;line-height:1;
+  }
+  .yr.founded{color:var(--fg-faint)}
+  .yr.joined{color:var(--accent)}
+  .yr.edge{transform:translateX(-100%)}
+  /* jconic / abd: year sits to the LEFT of the lime dot, vertically centered on it */
+  .yr.joined.mid{
+    top:50%;transform:translate(calc(-100% - 13px),-50%);
+  }
+  /* small caption above a join year (Big Hit era affiliation) */
+  .join-note{
+    position:absolute;bottom:calc(50% + 13px);transform:translateX(-50%);
+    font-family:var(--mono);font-size:8px;font-weight:400;letter-spacing:.05em;
+    color:var(--fg-faint);white-space:nowrap;
+  }
+
+  /* ───────── ORBIT (RADIAL) CHART ───────── */
+  #orbit{width:100%;height:auto;display:block;margin:0 auto;max-height:80vh;overflow:visible}
+  .orb-arc{fill:none;stroke:var(--hair);stroke-width:1}
+  .orb-arc.major{stroke:rgba(255,255,255,.20)}
+  .orb-now{fill:none;stroke:rgba(245,255,0,.34);stroke-width:1.5}
+  .orb-yr{font-family:var(--mono);font-size:12px;letter-spacing:.06em;fill:var(--fg-faint)}
+  .orb-yr.now{fill:rgba(245,255,0,.78)}
+
+  .orb-ray{stroke-linecap:round}
+  .orb-ray.indep{stroke:url(#orbIndep);stroke-width:9}
+  .orb-ray.hybe{stroke:url(#orbHybe);stroke-width:13}
+  /* grow-out entrance: revealed from origin (left) outward to the tip (right) */
+  .orb-ray{transition:stroke-dashoffset var(--grow,.9s) cubic-bezier(.2,.7,.25,1)}
+
+  .orb-reveal{opacity:0;transition:opacity .5s ease}
+  .orb-grp.in .orb-reveal{opacity:1}
+
+  .orb-mk-founded{fill:var(--bg);stroke:var(--fg-dim);stroke-width:1.5}
+  .orb-mk-joined{fill:var(--accent)}
+  .orb-mk-joined-halo{fill:rgba(245,255,0,.16)}
+  .orb-mk-debut{fill:var(--blue)}
+  .orb-mk-debut-halo{fill:rgba(92,184,255,.16)}
+
+  .orb-artist{font-family:var(--mono);font-size:9px;letter-spacing:.02em;fill:var(--fg-dim)}
+  .orb-artist .y{fill:var(--blue)}
+  .orb-label{font-family:var(--sans);font-weight:700;font-size:13.5px;letter-spacing:.01em;fill:#fff}
+
+  @media (prefers-reduced-motion: reduce){
+    .row{opacity:1!important;transform:none!important}
+    .track .seg.indep,.reveal,.orb-reveal{opacity:1!important}
+    .track .seg.hybe{transform:translateY(-50%) scaleX(1)!important}
+    .tl-note{opacity:1!important}
+    .orb-ray{stroke-dashoffset:0!important;transition:none!important}
+  }
+  @media (max-width:760px){
+    :root{--col:104px}
+    .axis,.grid{margin-left:104px}
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="top">
+      <p class="eyebrow">HYBE Music Group APAC · Growth Timeline</p>
+      <a class="back-link" href="index.html#map">
+        <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M11 6H1M5 2.5L1 6l4 3.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        Back to map
+      </a>
+    </div>
+
+    <div class="legend">
+      <span class="lg"><span class="seg indep"></span>Independent</span>
+      <span class="lg"><span class="seg hybe"></span>Under HYBE</span>
+      <span class="lg"><span class="dot lime"></span>Joined HYBE</span>
+      <span class="lg"><span class="dot blue"></span>Group debut</span>
+    </div>
+
+    <div id="chartArea"></div>
+  </div>
+
+  <div id="tweak-root"></div>
+
+  <script src="data.js"></script>
+  <script>
+  // ── Timeline render module ─────────────────────────────────────────────
+  // Builds either a LINEAR (Gantt-style) chart or an ORBIT (radial) chart
+  // from window.ORBITAL_DATA, then runs a staggered entrance. The active
+  // layout + entrance speed come from the Tweaks panel via window.applyTimeline.
+  (function () {
+    const D = window.ORBITAL_DATA;
+    const DMIN = 2004, DMAX = 2027, SPAN = DMAX - DMIN;
+    const PRESENT = 2026;
+    const HYBE_BORN = 2021;   // HYBE was founded in 2021 — nothing is "Under HYBE" before then
+    const TICKS = [2005, 2010, 2015, 2020, 2025];
+    const isYear = (s) => /^\d{4}$/.test(String(s));
+    const joinYear = (l) => (isYear(l.joined) ? +l.joined : l.founded);
+    const SHORT = { "TOMORROW X TOGETHER": "TXT" };
+    const SVGNS = "http://www.w3.org/2000/svg";
+
+    // One record per label, sorted chronologically by founding year.
+    // Every label keeps its real year of joining HYBE. The one exception is
+    // BIGHIT — HYBE's own predecessor — which only *became* HYBE when the
+    // company was founded in 2021, so it reads as independent until then.
+    const labels = D.labels
+      .map((l) => {
+        const jy = l.id === "bighit" ? HYBE_BORN : joinYear(l);
+        const groups = [];
+        (l.rings || []).forEach((r) => (r.artists || []).forEach((a) =>
+          groups.push({ name: a.name, year: a.debut })));
+        groups.sort((a, b) => a.year - b.year);
+        return {
+          id: l.id, name: l.name, founded: l.founded, join: jy,
+          acquired: jy > l.founded, groups
+        };
+      })
+      .sort((a, b) => a.founded - b.founded || a.join - b.join);
+
+    const area = document.getElementById("chartArea");
+    let revealTimers = [];
+
+    // ════════════════════ LINEAR LAYOUT ════════════════════
+    const xPct = (y) => (y - DMIN) / SPAN * 100;
+    const EDGE = 84;
+
+    function buildLinear(speed) {
+      const presentX = xPct(PRESENT);
+      const chart = document.createElement("div");
+      chart.className = "chart";
+      chart.innerHTML =
+        '<div class="axis" id="axis"></div>' +
+        '<div class="grid" id="grid"></div>' +
+        '<div class="rows" id="rows"></div>';
+      area.appendChild(chart);
+
+      const axis = chart.querySelector("#axis");
+      const grid = chart.querySelector("#grid");
+      TICKS.forEach((y) => {
+        const t = document.createElement("div");
+        t.className = "yr"; t.style.left = xPct(y) + "%"; t.textContent = y;
+        axis.appendChild(t);
+        const g = document.createElement("div");
+        g.className = "gridline major"; g.style.left = xPct(y) + "%";
+        grid.appendChild(g);
+      });
+      for (let y = DMIN + 1; y < DMAX; y++) {
+        if (TICKS.includes(y)) continue;
+        const g = document.createElement("div");
+        g.className = "gridline"; g.style.left = xPct(y) + "%";
+        grid.appendChild(g);
+      }
+      const nl = document.createElement("div");
+      nl.className = "nowline"; nl.style.left = xPct(PRESENT) + "%";
+      const nt = document.createElement("div");
+      nt.className = "nowtag"; nt.style.left = xPct(PRESENT) + "%"; nt.textContent = "2026";
+      grid.appendChild(nl); grid.appendChild(nt);
+
+      // HYBE was established in 2021 — a dashed marker line across the chart.
+      // Anything to the LEFT of it (PLEDIS / KOZ joining in 2020) predates HYBE,
+      // when these labels joined Big Hit Labels.
+      const hl = document.createElement("div");
+      hl.className = "hybeline"; hl.style.left = xPct(HYBE_BORN) + "%";
+      const htag = document.createElement("div");
+      htag.className = "hybetag"; htag.style.left = xPct(HYBE_BORN) + "%";
+      htag.innerHTML = '<span class="d"></span>HYBE est. 2021';
+      grid.appendChild(hl); grid.appendChild(htag);
+
+      const rows = chart.querySelector("#rows");
+      const rowEls = [];
+
+      labels.forEach((l) => {
+        const row = document.createElement("div");
+        row.className = "row";
+        rowEls.push(row);
+
+        const logo = document.createElement("div");
+        logo.className = "logocell";
+        const img = document.createElement("img");
+        // Pre-baked near display size — large white logos lose their thin
+        // strokes when the browser downscales them ~10-18× from source.
+        img.src = "logos/" + l.id + "_tl.png";
+        img.alt = l.name;
+        img.onerror = function () {
+          const span = document.createElement("span");
+          span.className = "txt"; span.textContent = l.name;
+          logo.replaceChild(span, img);
+        };
+        logo.appendChild(img);
+        row.appendChild(logo);
+
+        const track = document.createElement("div");
+        track.className = "track";
+        const fX = xPct(l.founded), jX = xPct(l.join);
+
+        if (l.acquired) {
+          const indep = document.createElement("div");
+          indep.className = "seg indep";
+          indep.style.left = fX + "%";
+          indep.style.width = (jX - fX) + "%";
+          track.appendChild(indep);
+        }
+
+        const hybe = document.createElement("div");
+        hybe.className = "seg hybe";
+        hybe.style.left = jX + "%";
+        hybe.style.width = Math.max(0.4, presentX - jX) + "%";
+        track.appendChild(hybe);
+
+        if (l.acquired) {
+          const fdot = document.createElement("div");
+          fdot.className = "mk founded reveal"; fdot.style.left = fX + "%";
+          track.appendChild(fdot);
+          const fyr = document.createElement("div");
+          fyr.className = "yr founded reveal"; fyr.style.left = fX + "%"; fyr.textContent = l.founded;
+          track.appendChild(fyr);
+        }
+
+        const jdot = document.createElement("div");
+        jdot.className = "mk joined reveal"; jdot.style.left = jX + "%";
+        track.appendChild(jdot);
+        const jyr = document.createElement("div");
+        const midYr = (l.id === "jconic" || l.id === "abd");
+        jyr.className = "yr joined reveal" + (midYr ? " mid" : (jX > EDGE ? " edge" : ""));
+        jyr.style.left = jX + "%"; jyr.textContent = l.join;
+        track.appendChild(jyr);
+
+        // Labels that joined during the pre-HYBE Big Hit era — a small caption
+        // sits just above their join year. YX began as Big Hit Ent. Japan.
+        const JOIN_NOTE = { pledis: "Big Hit Labels", koz: "Big Hit Labels",
+          source: "Big Hit Labels", yx: "Big Hit Ent. Japan" };
+        if (JOIN_NOTE[l.id]) {
+          const jn = document.createElement("div");
+          jn.className = "join-note reveal";
+          jn.style.left = jX + "%";
+          jn.textContent = JOIN_NOTE[l.id];
+          track.appendChild(jn);
+        }
+
+        l.groups.forEach((g) => {
+          const dx = xPct(g.year);
+          const dot = document.createElement("div");
+          dot.className = "mk debut reveal"; dot.style.left = dx + "%";
+          track.appendChild(dot);
+          const lbl = document.createElement("div");
+          lbl.className = "debut-lbl reveal" + (dx > EDGE ? " edge" : "");
+          lbl.style.left = dx + "%";
+          const nm = SHORT[g.name] || g.name;
+          lbl.innerHTML = nm + '<span class="y">\u2019' + String(g.year).slice(2) + "</span>";
+          track.appendChild(lbl);
+        });
+
+        row.appendChild(track);
+        rows.appendChild(row);
+      });
+
+      // staggered entrance — slower, smoother base; scaled by speed
+      const step = 320 / speed;
+      rowEls.forEach((r, i) =>
+        revealTimers.push(setTimeout(() => r.classList.add("in"), i * step)));
+      revealTimers.push(setTimeout(() =>
+        rowEls.forEach((r) => r.classList.add("in")), rowEls.length * step + 2000));
+    }
+
+    // ════════════════════ ORBIT (RADIAL) LAYOUT ════════════════════
+    // Time = radius. Orbit rings expand from a left-hand origin outward to
+    // the right; each label is a radial ray fanned vertically. Years read
+    // left → right as the rings grow.
+    const VW = 1280, VH = 980;
+    const OX = 80, OY = 490;          // origin (left, vertically centered)
+    const RMIN = 178, RMAX = 840;     // radius at DMIN … DMAX
+    const A0 = -34, A1 = 34;          // fan angle range (deg; 0 = east)
+    const rOf = (y) => RMIN + (y - DMIN) / SPAN * (RMAX - RMIN);
+    const pt = (r, deg) => {
+      const a = deg * Math.PI / 180;
+      return [OX + r * Math.cos(a), OY + r * Math.sin(a)];
+    };
+    const el = (name, attrs) => {
+      const e = document.createElementNS(SVGNS, name);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      return e;
+    };
+
+    function buildOrbit(speed) {
+      const svg = el("svg", { id: "orbit", viewBox: `0 0 ${VW} ${VH}`,
+        preserveAspectRatio: "xMidYMid meet" });
+
+      // gradient defs — radial from origin so rays glow brighter toward the
+      // present (outer / right edge).
+      const defs = el("defs", {});
+      const mkGrad = (id, color, o0, o1) => {
+        const g = el("radialGradient", { id, gradientUnits: "userSpaceOnUse",
+          cx: OX, cy: OY, r: RMAX });
+        const s0 = el("stop", { offset: (RMIN / RMAX).toFixed(3), "stop-color": color, "stop-opacity": o0 });
+        const s1 = el("stop", { offset: "1", "stop-color": color, "stop-opacity": o1 });
+        g.appendChild(s0); g.appendChild(s1); return g;
+      };
+      defs.appendChild(mkGrad("orbIndep", "#ffffff", 0.14, 0.46));
+      defs.appendChild(mkGrad("orbHybe", "#F5FF00", 0.26, 0.85));
+      svg.appendChild(defs);
+
+      // year arcs (the visible orbit rings)
+      const arcPath = (r) => {
+        const [x0, y0] = pt(r, A0 - 2), [x1, y1] = pt(r, A1 + 2);
+        return `M ${x0.toFixed(1)} ${y0.toFixed(1)} A ${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+      };
+      for (let y = DMIN + 1; y < DMAX; y++) {
+        const major = TICKS.includes(y);
+        if (!major && y % 1 !== 0) continue;
+        svg.appendChild(el("path", { d: arcPath(rOf(y)), class: "orb-arc" + (major ? " major" : "") }));
+      }
+      // present ring
+      svg.appendChild(el("path", { d: arcPath(rOf(PRESENT)), class: "orb-now" }));
+
+      // year labels at the top end of each tick arc (clear of the rays below)
+      TICKS.forEach((y) => {
+        const [lx, ly] = pt(rOf(y), A0 - 3);
+        const t = el("text", { x: lx.toFixed(1), y: (ly - 6).toFixed(1), class: "orb-yr",
+          "text-anchor": "middle" });
+        t.textContent = y; svg.appendChild(t);
+      });
+      const [nx, ny] = pt(rOf(PRESENT), A0 - 3);
+      const nowT = el("text", { x: nx.toFixed(1), y: (ny - 6).toFixed(1), class: "orb-yr now",
+        "text-anchor": "middle" });
+      nowT.textContent = "2026"; svg.appendChild(nowT);
+
+      // one ray per label, fanned across the angle range
+      const n = labels.length;
+      const grps = [];
+      labels.forEach((l, i) => {
+        const deg = A0 + (n === 1 ? 0.5 : i / (n - 1)) * (A1 - A0);
+        const g = el("g", { class: "orb-grp" });
+        grps.push(g);
+
+        const rf = rOf(l.founded), rj = rOf(l.join), rp = rOf(PRESENT);
+
+        // independent ray (founded → joined)
+        if (l.acquired) {
+          const [ax, ay] = pt(rf, deg), [bx, by] = pt(rj, deg);
+          const len = rj - rf;
+          const ray = el("line", { x1: ax.toFixed(1), y1: ay.toFixed(1),
+            x2: bx.toFixed(1), y2: by.toFixed(1), class: "orb-ray indep",
+            "stroke-dasharray": len.toFixed(1), "stroke-dashoffset": len.toFixed(1) });
+          g.appendChild(ray);
+        }
+        // under-HYBE ray (joined → present)
+        const [cx, cy] = pt(rj, deg), [dx, dy] = pt(rp, deg);
+        const lenH = rp - rj;
+        const rayH = el("line", { x1: cx.toFixed(1), y1: cy.toFixed(1),
+          x2: dx.toFixed(1), y2: dy.toFixed(1), class: "orb-ray hybe",
+          "stroke-dasharray": lenH.toFixed(1), "stroke-dashoffset": lenH.toFixed(1) });
+        g.appendChild(rayH);
+
+        // founded marker
+        if (l.acquired) {
+          const [fx, fy] = pt(rf, deg);
+          g.appendChild(el("circle", { cx: fx.toFixed(1), cy: fy.toFixed(1), r: 5,
+            class: "orb-mk-founded orb-reveal" }));
+        }
+        // joined marker (lime, with halo)
+        const [jx, jy] = pt(rj, deg);
+        g.appendChild(el("circle", { cx: jx.toFixed(1), cy: jy.toFixed(1), r: 11,
+          class: "orb-mk-joined-halo orb-reveal" }));
+        g.appendChild(el("circle", { cx: jx.toFixed(1), cy: jy.toFixed(1), r: 6,
+          class: "orb-mk-joined orb-reveal" }));
+
+        // group debut markers + small names (offset perpendicular to the ray)
+        const perp = (deg - 90) * Math.PI / 180;
+        const odx = 15 * Math.cos(perp), ody = 15 * Math.sin(perp);
+        l.groups.forEach((gr) => {
+          const [gx, gy] = pt(rOf(gr.year), deg);
+          g.appendChild(el("circle", { cx: gx.toFixed(1), cy: gy.toFixed(1), r: 7,
+            class: "orb-mk-debut-halo orb-reveal" }));
+          g.appendChild(el("circle", { cx: gx.toFixed(1), cy: gy.toFixed(1), r: 4.5,
+            class: "orb-mk-debut orb-reveal" }));
+          const tx = el("text", { x: (gx + odx).toFixed(1), y: (gy + ody).toFixed(1),
+            class: "orb-artist orb-reveal", "text-anchor": "middle" });
+          const nm = SHORT[gr.name] || gr.name;
+          tx.textContent = nm;
+          const yy = el("tspan", { class: "y" });
+          yy.textContent = " \u2019" + String(gr.year).slice(2);
+          tx.appendChild(yy);
+          g.appendChild(tx);
+        });
+
+        // label name at the outer tip (beyond present)
+        const [tipx, tipy] = pt(rp + 34, deg);
+        const lt = el("text", { x: tipx.toFixed(1), y: (tipy + 4).toFixed(1),
+          class: "orb-label orb-reveal", "text-anchor": "start" });
+        lt.textContent = l.name;
+        g.appendChild(lt);
+
+        svg.appendChild(g);
+      });
+
+      area.appendChild(svg);
+
+      // entrance — rays grow outward, dots/labels fade, staggered per label
+      const grow = (1.35 / speed).toFixed(2) + "s";
+      const step = 340 / speed;
+      grps.forEach((g, i) => {
+        revealTimers.push(setTimeout(() => {
+          g.querySelectorAll(".orb-ray").forEach((r) => {
+            r.style.setProperty("--grow", grow);
+            r.style.strokeDashoffset = "0";
+          });
+          g.classList.add("in");
+        }, 120 + i * step));
+      });
+      revealTimers.push(setTimeout(() => grps.forEach((g) => {
+        g.querySelectorAll(".orb-ray").forEach((r) => { r.style.strokeDashoffset = "0"; });
+        g.classList.add("in");
+      }), grps.length * step + 1800));
+    }
+
+    // ── controller ──────────────────────────────────────────────────────
+    let current = null;
+    function applyTimeline(t) {
+      t = t || {};
+      const layout = t.layout || "linear";
+      const speed = Math.max(0.3, Number(t.entrance) || 1);
+      const sig = layout + "|" + speed;
+      if (sig === current) return;
+      current = sig;
+      revealTimers.forEach(clearTimeout); revealTimers = [];
+      area.innerHTML = "";
+      if (layout === "orbit") buildOrbit(speed);
+      else buildLinear(speed);
+    }
+    window.applyTimeline = applyTimeline;
+
+    // initial paint (default linear) so the page isn't blank while Babel
+    // compiles the Tweaks panel; the panel re-applies the persisted layout.
+    applyTimeline({ layout: "linear", entrance: 1 });
+  })();
+  </script>
+
+  <!-- React Tweaks panel: layout (linear/orbit) + entrance speed -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel">
+    const TL_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "layout": "linear",
+      "entrance": 0.5
+    }/*EDITMODE-END*/;
+
+    function TimelineTweaks() {
+      const [t, setTweak] = useTweaks(TL_DEFAULTS);
+      React.useEffect(() => {
+        if (window.applyTimeline) window.applyTimeline(t);
+      }, [t.layout, t.entrance]);
+      return (
+        <TweaksPanel title="Tweaks">
+          <TweakSection label="Layout" />
+          <TweakRadio label="Shape" value={t.layout}
+            options={[{ value: "linear", label: "Linear" }, { value: "orbit", label: "Orbit" }]}
+            onChange={(v) => setTweak("layout", v)} />
+          <div style={{ fontSize: 10, color: "rgba(41,38,27,.55)",
+            fontFamily: "ui-monospace, monospace", lineHeight: 1.5, marginTop: 2 }}>
+            Orbit bends the timeline into circular orbits that expand left → right.
+          </div>
+          <TweakSection label="Motion" />
+          <TweakSlider label="Entrance speed" value={t.entrance} min={0.4} max={2} step={0.1} unit="×"
+            onChange={(v) => setTweak("entrance", v)} />
+        </TweaksPanel>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById("tweak-root")).render(<TimelineTweaks />);
+  </script>
+
+  <template id="__bundler_thumbnail">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" fill="#0a0a0a" />
+      <path d="M14 50 A36 36 0 0 1 86 50" fill="none" stroke="#F5FF00" stroke-width="2.5" opacity="0.55" />
+      <path d="M24 50 A26 26 0 0 1 76 50" fill="none" stroke="#5CB8FF" stroke-width="2.5" opacity="0.5" />
+      <circle cx="14" cy="50" r="3.4" fill="#F5FF00" />
+      <circle cx="86" cy="50" r="3.4" fill="#F5FF00" />
+      <circle cx="76" cy="50" r="2.8" fill="#5CB8FF" />
+    </svg>
+  </template>
+</body>
+</html>
