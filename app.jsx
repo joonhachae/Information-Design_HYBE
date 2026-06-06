@@ -8,8 +8,28 @@
 
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
-const VW = 1920,VH = 1080;
+// Canvas dimensions. Desktop is landscape 1920×1080; phones rotate the whole
+// map 90° into a portrait 1080×1920 frame (same orbits, vertical arrangement).
+const VW_L = 1920, VH_L = 1080;
+const VW_P = 1080, VH_P = 1920;
 const DRAG_THRESHOLD = 4; // px of SVG movement before it becomes a drag
+
+// Portrait constellation = the landscape map rotated 90°. Each label keeps its
+// orbit (rings + artists + radii) untouched; only its CENTER is transposed
+// (desktop cx↔cy) so the arrangement reads top-to-bottom instead of
+// left-to-right. Because it is a rigid rotation of a non-overlapping layout,
+// nothing newly collides in the narrow frame.
+const PORTRAIT_POS = {
+  belift: { cx: 288, cy: 379 },
+  ador:   { cx: 828, cy: 313 },
+  pledis: { cx: 822, cy: 769 },
+  jconic: { cx: 359, cy: 823 },
+  yx:     { cx: 188, cy: 1000 },
+  abd:    { cx: 586, cy: 1098 },
+  source: { cx: 897, cy: 1248 },
+  bighit: { cx: 342, cy: 1518 },
+  koz:    { cx: 882, cy: 1643 }
+};
 
 // Order in which labels are revealed after the welcome overlay finishes.
 // Based on order of joining HYBE (founding date for newer in-house labels).
@@ -47,6 +67,17 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
     "source": { "cx": 1237, "cy": 916 },
     "koz": { "cx": 1653, "cy": 841 },
     "abd": { "cx": 1095, "cy": 607 }
+  },
+  "portraitPositions": {
+    "belift": { "cx": 288, "cy": 379 },
+    "ador": { "cx": 828, "cy": 313 },
+    "pledis": { "cx": 822, "cy": 769 },
+    "jconic": { "cx": 359, "cy": 823 },
+    "yx": { "cx": 188, "cy": 1000 },
+    "abd": { "cx": 586, "cy": 1098 },
+    "source": { "cx": 897, "cy": 1248 },
+    "bighit": { "cx": 342, "cy": 1518 },
+    "koz": { "cx": 882, "cy": 1643 }
   }
 } /*EDITMODE-END*/;
 
@@ -77,15 +108,15 @@ function flattenArtists(labels) {
 }
 
 // ── starfield background ────────────────────────────────────────────────────
-function Stars({ show }) {
+function Stars({ show, w = VW_L, h = VH_L }) {
   const stars = useMemo(() =>
   Array.from({ length: 90 }, () => ({
-    x: Math.random() * VW,
-    y: Math.random() * VH,
+    x: Math.random() * w,
+    y: Math.random() * h,
     r: Math.random() * 1.1 + 0.2,
     o: Math.random() * 0.4 + 0.05
   })),
-  []);
+  [w, h]);
   if (!show) return null;
   return (
     <g className="stars">
@@ -170,6 +201,24 @@ const MEMBER_IMG_POS = {
 // ── main app ────────────────────────────────────────────────────────────────
 function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  // Portrait / phone detection — at this breakpoint the app rotates the
+  // constellation into a vertical arrangement (see PORTRAIT_POS). Everything
+  // else (landing motion, focus-zoom, modals) is shared with desktop.
+  const [portrait, setPortrait] = useState(() =>
+    typeof window !== "undefined" && (
+      new URLSearchParams(window.location.search).get("portrait") === "1" ||
+      window.matchMedia("(max-width:760px)").matches));
+  useEffect(() => {
+    const forced = new URLSearchParams(window.location.search).get("portrait") === "1";
+    const mq = window.matchMedia("(max-width:760px)");
+    const on = () => setPortrait(forced || mq.matches);
+    if (mq.addEventListener) mq.addEventListener("change", on);
+    else mq.addListener(on);
+    return () => { if (mq.removeEventListener) mq.removeEventListener("change", on); else mq.removeListener(on); };
+  }, []);
+  // Active canvas dimensions: landscape 1920×1080, portrait 1080×1920.
+  const VW = portrait ? VW_P : VW_L;
+  const VH = portrait ? VH_P : VH_L;
   const [hoverArtist, setHoverArtist] = useState(null);
   const [popupArtist, setPopupArtist] = useState(null);
   const [previewMember, setPreviewMember] = useState(null); // {name, year, img} in popup
@@ -324,6 +373,16 @@ function App() {
   const positionsRef = useRef(positions);
   positionsRef.current = positions;
 
+  // Portrait has its own independent, user-draggable position store so the
+  // mobile layout can be fine-tuned without touching the desktop positions.
+  // Empty entries fall back to the PORTRAIT_POS defaults.
+  const [portraitPositions, setPortraitPositions] = useState(() => t.portraitPositions || {});
+  const portraitPosRef = useRef(portraitPositions);
+  portraitPosRef.current = portraitPositions;
+  const pPos = useCallback((lbl) =>
+    portraitPositions[lbl.id] || PORTRAIT_POS[lbl.id] || { cx: lbl.cx, cy: lbl.cy },
+  [portraitPositions]);
+
   const data = window.ORBITAL_DATA;
   const allArtists = useMemo(() => flattenArtists(data.labels), [data]);
 
@@ -355,18 +414,22 @@ function App() {
 
   // Effective position for a label (override or original).
   const getPos = useCallback((lbl) =>
-  positions[lbl.id] || { cx: lbl.cx, cy: lbl.cy },
-  [positions]);
+  portrait
+    ? pPos(lbl)
+    : (positions[lbl.id] || { cx: lbl.cx, cy: lbl.cy }),
+  [positions, portrait, pPos]);
 
   // Lookup ref for the rAF loop (closure-stable; mutated in effect).
   const labelPosRef = useRef({});
   useEffect(() => {
     const next = {};
     for (const lbl of data.labels) {
-      next[lbl.id] = positions[lbl.id] || { cx: lbl.cx, cy: lbl.cy };
+      next[lbl.id] = portrait
+        ? pPos(lbl)
+        : (positions[lbl.id] || { cx: lbl.cx, cy: lbl.cy });
     }
     labelPosRef.current = next;
-  }, [positions, data.labels]);
+  }, [positions, data.labels, portrait, pPos]);
 
   // ── rAF orbit loop ───────────────────────────────────────────────────────
   const artistRefs = useRef({});
@@ -675,6 +738,39 @@ function App() {
   // ── drag-or-click on label ───────────────────────────────────────────────
   const onLabelPointerDown = (lbl) => (e) => {
     e.stopPropagation();
+    // Portrait / touch: drag to reposition (own persisted store), tap to focus.
+    if (portrait) {
+      if (!welcomed) return;
+      e.preventDefault();
+      // When zoomed into a label, a tap returns to the overview (no dragging).
+      if (focusRef.current) { setFocusLabel(null); return; }
+      setHoverLabel(null);
+      const startPos = portraitPosRef.current[lbl.id] || PORTRAIT_POS[lbl.id] || { cx: lbl.cx, cy: lbl.cy };
+      const startPt = svgPointFromClient(e.clientX, e.clientY);
+      let isDrag = false;
+      const TOUCH_THRESHOLD = 22; // larger than mouse — fingers jitter on tap
+      const move = (ev) => {
+        const cur = svgPointFromClient(ev.clientX, ev.clientY);
+        const dx = cur.x - startPt.x, dy = cur.y - startPt.y;
+        if (!isDrag && Math.hypot(dx, dy) > TOUCH_THRESHOLD) {
+          isDrag = true; setDraggingId(lbl.id);
+        }
+        if (isDrag) {
+          const nx = Math.max(80, Math.min(VW - 80, startPos.cx + dx));
+          const ny = Math.max(80, Math.min(VH - 80, startPos.cy + dy));
+          setPortraitPositions((prev) => ({ ...prev, [lbl.id]: { cx: Math.round(nx), cy: Math.round(ny) } }));
+        }
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        if (isDrag) { setDraggingId(null); setTweak('portraitPositions', portraitPosRef.current); }
+        else { setFocusLabel((prev) => prev === lbl.id ? null : lbl.id); }
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      return;
+    }
     e.preventDefault();
     const startPos = positionsRef.current[lbl.id] || { cx: lbl.cx, cy: lbl.cy };
     const startPt = svgPointFromClient(e.clientX, e.clientY);
@@ -715,25 +811,25 @@ function App() {
     if (!focusLabel) return "translate(0 0) scale(1)";
     const lbl = allLabelsById[focusLabel];
     if (!lbl) return "translate(0 0) scale(1)";
-    const p = positions[lbl.id] || { cx: lbl.cx, cy: lbl.cy };
+    const p = getPos(lbl);
     const scale = 1.8;
     const tx = VW / 2 - p.cx * scale;
     const ty = VH / 2 - p.cy * scale;
     return `translate(${tx} ${ty}) scale(${scale})`;
-  }, [focusLabel, allLabelsById, positions]);
+  }, [focusLabel, allLabelsById, getPos, VW, VH]);
 
   // ── intro transform: shrink whole map into the HYBE container ───────────
   const introTransform = useMemo(() => {
     // bounding-center of all labels (live, respecting drag overrides)
-    const xs = data.labels.map((l) => positions[l.id]?.cx ?? l.cx);
-    const ys = data.labels.map((l) => positions[l.id]?.cy ?? l.cy);
+    const xs = data.labels.map((l) => (portrait ? pPos(l).cx : positions[l.id]?.cx) ?? l.cx);
+    const ys = data.labels.map((l) => (portrait ? pPos(l).cy : positions[l.id]?.cy) ?? l.cy);
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
     const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
     const scale = 0.4;
     const tx = VW / 2 - cx * scale;
     const ty = VH / 2 - cy * scale;
     return `translate(${tx} ${ty}) scale(${scale})`;
-  }, [data.labels, positions]);
+  }, [data.labels, positions, portrait, VW, VH, pPos]);
 
   // Dynamic mode never uses the introTransform — the orbits always render at
   // full size; the focus transform handles both overview (identity) and zoom.
@@ -742,6 +838,11 @@ function App() {
 
   // ── Tweaks: reset / copy ─────────────────────────────────────────────────
   const resetPositions = () => {
+    if (portrait) {
+      setPortraitPositions({});
+      setTweak('portraitPositions', {});
+      return;
+    }
     setPositions({});
     setTweak('positions', {});
   };
@@ -779,8 +880,10 @@ function App() {
   entered && edge;
   // Title (header) stays visible always. The side clusters hide by default and
   // reveal together whenever the cursor nears ANY screen edge.
-  const showSearch = isDynamic ? edge : showChrome;
-  const showControls = isDynamic ? edge : showChrome;
+  // Mobile shows a clean map: no search, no bottom control bar. Speed runs at
+  // the 1.0x default (controls are hidden, so it can't be changed there).
+  const showSearch = isDynamic ? (portrait ? false : edge) : showChrome;
+  const showControls = isDynamic ? (portrait ? false : edge) : showChrome;
   const showLegend = isDynamic ? edge : showChrome;
   // Ink colors flip with the bg: black on lime, white-ish on dark.
   const ringDim = isLanding ? "rgba(10,10,10,.45)" : "rgba(255,255,255,.35)";
@@ -794,7 +897,7 @@ function App() {
     <div className={"stage" + (demo ? " demo" : "")} data-state={stageState} data-mode={t.mode}>
       <svg ref={svgRef} viewBox={`0 0 ${VW} ${VH}`}
       preserveAspectRatio="xMidYMid meet"
-      className={"orbit-svg" + (draggingId ? " dragging" : "") + (t.mode === "stylish" ? " stylish" : " minimal")} style={{ strokeWidth: "1.5px" }}>
+      className={"orbit-svg" + (draggingId ? " dragging" : "") + (focusLabel ? " focused" : "") + (t.mode === "stylish" ? " stylish" : " minimal")} style={{ strokeWidth: "1.5px" }}>
         <defs>
           {/* Soft radial gradient — accent → transparent.
                                                  Richer stop curve so a single ellipse per label feels lush,
@@ -808,7 +911,7 @@ function App() {
           </radialGradient>
         </defs>
 
-        <Stars show={t.showStars} />
+        <Stars show={t.showStars} w={VW} h={VH} />
 
         {/* HYBE container ring + centered ENTER splash — used by stylish/
                                                minimal only. Dynamic mode goes straight to the main home. */}
@@ -1448,4 +1551,9 @@ function App() {
 
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+// Expose for the boot controller (boot.jsx), which picks the desktop orbital
+// app vs. the mobile vertical layout (mobile.jsx) based on viewport width.
+// Also expose the member-photo maps so mobile.jsx can reuse them.
+window.OrbitalApp = App;
+window.MEMBER_IMG = MEMBER_IMG;
+window.MEMBER_IMG_POS = MEMBER_IMG_POS;

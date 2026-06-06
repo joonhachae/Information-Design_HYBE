@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>HYBE Music Group APAC Map: Growth Timeline</title>
+<title>Growth Timeline — HYBE Music Group APAC</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -243,9 +243,65 @@
     .tl-note{opacity:1!important}
     .orb-ray{stroke-dashoffset:0!important;transition:none!important}
   }
+  /* (legacy mobile card-stack removed — mobile now uses the desktop linear
+     chart, fit to portrait width; see the single mobile block below) */
+
+  /* ════ MOBILE — same as desktop, fit to portrait. The desktop chart already
+     fits its viewport width with NO horizontal scroll; we keep exactly that and
+     just shrink the logo column + fonts so it fits a phone. Because nothing
+     scrolls, the logo column needs NO masking plate — that flat plate was the
+     hard box. The shared vertical year-axis identity (same year = one gridline
+     across every label) is untouched. ════ */
   @media (max-width:760px){
-    :root{--col:104px}
-    .axis,.grid{margin-left:104px}
+    :root{--col:64px}
+    body{overflow:hidden}
+    .page{height:100vh;min-height:0;padding:18px 14px 14px;max-width:none}
+    .top{flex-wrap:wrap;gap:12px;margin-bottom:0}
+    .titles{max-width:none}
+    .eyebrow{font-size:10.5px;letter-spacing:.16em}
+    h1{font-size:clamp(26px,8vw,34px)}
+    .legend{gap:9px 15px;margin:12px 0 2px;font-size:9px}
+    .back-link{font-size:9px;padding:7px 10px}
+
+    /* keep the desktop fit-to-width column layout; do NOT scroll horizontally.
+       NB: the base CSS already aligns the axis (margin-left:var(--col)) and the
+       grid (left:var(--col)) off the SAME --col, so year ticks and gridlines
+       share one vertical axis — don't re-add margin-left to .grid here or it
+       double-offsets and the year lines drift. */
+    #chartArea{margin-top:10px}
+    .logocell{background:none;border:none;padding-right:8px}
+    .logocell img{max-width:50px;max-height:16px}
+    .axis .yr{font-size:8px}
+    .yr{font-size:9px;top:calc(50% + 11px)}
+    .nowtag{font-size:8px}
+    /* The present marker ("NOW 2026") sits where the 2025 tick would be — drop
+       the last axis tick on mobile so they don't collide. */
+    .axis .yr:last-child{display:none}
+    /* "HYBE est. 2021" — rotate it vertical so it runs DOWN the dashed line
+       instead of lying across the year ticks. Sits just LEFT of the line so it
+       clears the centered 2021 join-year label on the top row. A short gradient
+       chip keeps it legible over the bars beneath. */
+    .hybetag{
+      top:1px;bottom:auto;transform:none;margin-left:4px;
+      writing-mode:vertical-rl;flex-direction:row;gap:5px;
+      font-size:7px;letter-spacing:.14em;
+      padding:4px 3px 5px;
+      background:rgba(12,12,12,.92);
+      border:.5px solid rgba(255,255,255,.12);
+      border-radius:4px;z-index:6;
+    }
+    .hybetag .d{width:4px;height:4px}
+
+    /* Two-lane debut labels: the time axis is compressed on a phone, so
+       destaggerMobileLabels() bumps a label up to .lane-hi whenever it would
+       overlap its neighbour in the lower lane. */
+    .debut-lbl{font-size:7.5px;bottom:calc(50% + 10px)}
+    .debut-lbl.lane-hi{bottom:calc(50% + 22px)}
+    /* join-note moves BELOW the line (its own band under the year) so it stops
+       colliding with the artist/debut labels that sit above the line. */
+    .join-note{font-size:7px;bottom:auto;top:calc(50% + 22px);color:var(--fg-faint)}
+    /* the orbit layout option is a single SVG — let it fit width */
+    #orbit{max-height:none}
   }
 </style>
 </head>
@@ -451,6 +507,33 @@
         revealTimers.push(setTimeout(() => r.classList.add("in"), i * step)));
       revealTimers.push(setTimeout(() =>
         rowEls.forEach((r) => r.classList.add("in")), rowEls.length * step + 2000));
+
+      // resolve label collisions once the rows have laid out (and again after
+      // fonts/widths settle) — only does anything at the mobile breakpoint.
+      requestAnimationFrame(destaggerMobileLabels);
+      revealTimers.push(setTimeout(destaggerMobileLabels, 320));
+    }
+
+    // On a phone the 21-year axis is compressed, so artist (debut) labels can
+    // collide. Give them two vertical lanes: each stays in the lower lane unless
+    // it would overlap the previous label, in which case it's bumped to
+    // .lane-hi. Pure horizontal geometry, so lane changes never shift x.
+    function destaggerMobileLabels() {
+      const mobile = window.matchMedia("(max-width:760px)").matches;
+      document.querySelectorAll("#rows .track").forEach((track) => {
+        const lbls = [...track.querySelectorAll(".debut-lbl")];
+        lbls.forEach((l) => l.classList.remove("lane-hi"));
+        if (!mobile || lbls.length < 2) return;
+        lbls.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+        let loRight = -1e9, hiRight = -1e9;
+        const GAP = 5;
+        lbls.forEach((l) => {
+          const r = l.getBoundingClientRect();
+          if (r.left >= loRight + GAP) { loRight = r.right; }
+          else if (r.left >= hiRight + GAP) { l.classList.add("lane-hi"); hiRight = r.right; }
+          else { loRight = r.right; }
+        });
+      });
     }
 
     // ════════════════════ ORBIT (RADIAL) LAYOUT ════════════════════
@@ -604,10 +687,112 @@
       }), grps.length * step + 1800));
     }
 
+    // ════════════════════ MOBILE LAYOUT (vertical stack) ════════════════════
+    // On phones the wide Gantt / radial charts don't fit a portrait frame, so
+    // each label becomes a full-width card with its own time track (founded →
+    // joined → present), debut markers, and faint year gridlines.
+    function buildMobile(speed) {
+      const wrap = document.createElement("div");
+      wrap.className = "m-tl";
+
+      const cards = [];
+      labels.forEach((l) => {
+        const card = document.createElement("div");
+        card.className = "m-tl-card";
+        cards.push(card);
+
+        const head = document.createElement("div");
+        head.className = "m-tl-head";
+        const img = document.createElement("img");
+        img.src = "logos/" + l.id + "_tl.png";
+        img.alt = l.name;
+        img.onerror = function () {
+          const s = document.createElement("span");
+          s.className = "m-tl-name"; s.textContent = l.name;
+          head.replaceChild(s, img);
+        };
+        head.appendChild(img);
+        const fy = document.createElement("span");
+        fy.className = "m-tl-founded";
+        fy.textContent = l.groups.length
+          ? l.groups.length + (l.groups.length > 1 ? " groups" : " group")
+          : "Coming soon";
+        head.appendChild(fy);
+        card.appendChild(head);
+
+        const track = document.createElement("div");
+        track.className = "m-tl-track";
+
+        // faint year gridlines + present line
+        TICKS.forEach((y) => {
+          const g = document.createElement("div");
+          g.className = "m-tl-gl"; g.style.left = xPct(y) + "%";
+          track.appendChild(g);
+        });
+        const nowg = document.createElement("div");
+        nowg.className = "m-tl-gl now"; nowg.style.left = xPct(PRESENT) + "%";
+        track.appendChild(nowg);
+
+        const fX = xPct(l.founded), jX = xPct(l.join), pX = xPct(PRESENT);
+        if (l.acquired) {
+          const indep = document.createElement("div");
+          indep.className = "m-tl-seg indep";
+          indep.style.left = fX + "%"; indep.style.width = (jX - fX) + "%";
+          track.appendChild(indep);
+        }
+        const hybe = document.createElement("div");
+        hybe.className = "m-tl-seg hybe";
+        hybe.style.left = jX + "%"; hybe.style.width = Math.max(0.6, pX - jX) + "%";
+        track.appendChild(hybe);
+
+        if (l.acquired) {
+          const fd = document.createElement("div");
+          fd.className = "m-tl-mk founded"; fd.style.left = fX + "%";
+          track.appendChild(fd);
+        }
+        const jd = document.createElement("div");
+        jd.className = "m-tl-mk joined"; jd.style.left = jX + "%";
+        track.appendChild(jd);
+
+        l.groups.forEach((g) => {
+          const dx = xPct(g.year);
+          const d = document.createElement("div");
+          d.className = "m-tl-mk debut"; d.style.left = dx + "%";
+          track.appendChild(d);
+          const lb = document.createElement("div");
+          lb.className = "m-tl-debut" + (dx > EDGE ? " edge" : "");
+          lb.style.left = dx + "%";
+          lb.innerHTML = (SHORT[g.name] || g.name) +
+            '<span class="y">\u2019' + String(g.year).slice(2) + "</span>";
+          track.appendChild(lb);
+        });
+        card.appendChild(track);
+
+        const yr = document.createElement("div");
+        yr.className = "m-tl-years";
+        yr.innerHTML = (l.acquired ? "Est. " + l.founded + " · " : "") +
+          '<span class="j">Joined HYBE \u2019' + String(l.join).slice(2) + "</span>";
+        card.appendChild(yr);
+
+        wrap.appendChild(card);
+      });
+
+      area.appendChild(wrap);
+
+      const step = 200 / speed;
+      cards.forEach((c, i) =>
+        revealTimers.push(setTimeout(() => c.classList.add("in"), 80 + i * step)));
+      revealTimers.push(setTimeout(() =>
+        cards.forEach((c) => c.classList.add("in")), cards.length * step + 1800));
+    }
+
     // ── controller ──────────────────────────────────────────────────────
+    const MOBILE_Q = window.matchMedia("(max-width:760px)");
     let current = null;
+    let lastT = { layout: "linear", entrance: 1 };
     function applyTimeline(t) {
-      t = t || {};
+      t = t || lastT;
+      lastT = t;
       const layout = t.layout || "linear";
       const speed = Math.max(0.3, Number(t.entrance) || 1);
       const sig = layout + "|" + speed;
@@ -619,6 +804,17 @@
       else buildLinear(speed);
     }
     window.applyTimeline = applyTimeline;
+    // Re-render when crossing the mobile breakpoint (rotate / resize).
+    const onBP = () => applyTimeline(lastT);
+    if (MOBILE_Q.addEventListener) MOBILE_Q.addEventListener("change", onBP);
+    else if (MOBILE_Q.addListener) MOBILE_Q.addListener(onBP);
+
+    // Re-resolve label lanes on resize/orientation change (within mobile).
+    let rzTimer;
+    window.addEventListener("resize", () => {
+      clearTimeout(rzTimer);
+      rzTimer = setTimeout(destaggerMobileLabels, 150);
+    });
 
     // initial paint (default linear) so the page isn't blank while Babel
     // compiles the Tweaks panel; the panel re-applies the persisted layout.
